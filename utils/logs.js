@@ -4,11 +4,11 @@ const models = require('../models');
 const { nowInUnix } = require('./timeZoneModule');
 const constants = require('../components/constants/index');
 
-const logsConstructor = async (type, data, motive, username, source = 'InventarioFS') => {
+const logsConstructor = async (type, data, motive, username, source = 'Rifa') => {
   try {
     
     let log = new models.Logs({
-      username: username || 'InventarioFS',
+      username: username || 'Rifa',
       type: type,
       data: data,
       motive: motive,

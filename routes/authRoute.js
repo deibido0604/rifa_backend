@@ -8,7 +8,7 @@ router.post('/login', (req, res) => {
   if (process.env.NODE_ENV === 'development' || !process.env.JWSKURI) {
     const token = jwt.sign(
       {
-        email: username || 'test@inventario.com',
+        email: username || 'test@rifa.com',
         username: username || 'test_user',
         userId: 'test_123',
         role: 'admin'
@@ -21,7 +21,7 @@ router.post('/login', (req, res) => {
       success: true,
       token,
       user: {
-        email: username || 'test@inventario.com',
+        email: username || 'test@rifa.com',
         username: username || 'test_user',
         role: 'admin'
       }

@@ -117,13 +117,13 @@ app.use(async (req, res, next) => {
     next();
 });
 
-app.use('/api-inventario-fs', require('./routes/index'));
+app.use('/api-rifa', require('./routes/index'));
 
 app.get('/health', (req, res) => {
     res.json({
         status: 'healthy',
         timestamp: new Date().toISOString(),
-        service: 'inventario-fs-backend'
+        service: 'rifa-backend'
     });
 });
 
@@ -132,10 +132,10 @@ app.get('/', (req, res) => {
     res.json({
         name: pkg.name,
         version: pkg.version,
-        status: 'Inventario FS API Service',
+        status: 'Rifa API Service',
         documentation: '/api-docs',
         health: '/health',
-        basePath: '/api-inventario-fs'
+        basePath: '/api-rifa'
     });
 });
 

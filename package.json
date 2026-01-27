@@ -1,5 +1,5 @@
 {
-  "name": "inventario_fs_backend",
+  "name": "rifa_backend",
   "version": "1.0.0",
   "main": "server.js",
   "scripts": {
