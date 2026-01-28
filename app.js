@@ -1,6 +1,7 @@
 const express = require('express');
 const morgan = require('morgan');
 const nocache = require('nocache');
+const bodyParser = require('body-parser');
 const bearerToken = require('express-bearer-token');
 const mung = require('express-mung');
 const cors = require('cors');
@@ -13,22 +14,47 @@ const jwksClient = require("jwks-rsa");
 
 require('dotenv').config();
 
+const { connectDB } = require("./config/MDBConnection.js");
+
 const app = express();
 
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+connectDB();
+
+const client = jwksClient({
+    cache: true,
+    rateLimit: true,
+    jwksRequestsPerMinute: 15,
+    jwksUri: process.env.JWSKURI || 'https://login.microsoftonline.com/common/discovery/v2.0/keys',
+});
+
+function getKey(header, callback) {
+    client.getSigningKey(header.kid, (err, key) => {
+        if (err) {
+            return callback(err);
+        }
+        const signingKey = key.publicKey || key.rsaPublicKey;
+        callback(null, signingKey);
+    });
+}
 
 app.use(fileUpload({
     useTempFiles: true,
-    tempFileDir: '/tmp'
+    tempFileDir: './uploads'
 }));
 
-app.use(mung.json((body, req, res) => {
-    body.message = body.message || 'Successfull request!';
-    body.code = body.code ?? res.statusCode;
-    body.success = body.code === 200;
-    return body;
-}));
+app.use(mung.json(
+    (body, req, res) => {
+        const reponseBody = body;
+        reponseBody.message = body.message || 'Successfull request!';
+        reponseBody.code = reponseBody.code != null ? reponseBody.code : res.statusCode;
+        reponseBody.success = reponseBody.code === 200;
+        return reponseBody;
+    }
+));
+
+function haltOnTimedout(req, res, next) {
+    if (!req.timedout) next();
+}
 
 app.use(morgan('combined'));
 app.use(cors());
@@ -36,11 +62,105 @@ app.use(nocache());
 app.use(helmet());
 app.use(bearerToken());
 app.use(timeout('200s'));
+app.use(haltOnTimedout);
+app.use(bodyParser.json({ limit: '10mb' }));
+app.use(bodyParser.urlencoded({ limit: '10mb', extended: true }));
+
+app.use(async (req, res, next) => {
+    const publicRoutes = ['/', '/health', '/api-docs'];
+    if (publicRoutes.includes(req.path)) {
+        return next();
+    }
+
+    if (req.headers.authorization) {
+        try {
+            const token = req.headers.authorization.split(' ')[1];
+            if (!token) {
+                return res.status(401).json({ 
+                    success: false,
+                    code: 401, 
+                    message: 'Unauthorized, token missing', 
+                    data: {} 
+                });
+            }
+            
+            if (process.env.NODE_ENV === 'development') {
+                const decoded = jwt.decode(token);
+                if (decoded) {
+                    req.user = decoded;
+                    req.headers['console-user'] = decoded.email || decoded.username || 'dev_user';
+                }
+            }
+        } catch (err) {
+            console.error('Token verification error:', err.message);
+            return res.status(401).json({
+                success: false,
+                code: 401,
+                error: 'Unauthorized',
+                message: 'Invalid token',
+                data: {}
+            });
+        }
+    } else if (process.env.NODE_ENV === 'development') {
+        console.log('⚠️  Desarrollo: Sin token de autorización');
+        req.user = { email: 'dev@localhost', username: 'dev_user' };
+        req.headers['console-user'] = 'dev@localhost';
+    } else {
+        return res.status(401).json({
+            success: false,
+            code: 401,
+            error: 'Unauthorized',
+            message: 'Token required',
+            data: {}
+        });
+    }
+    next();
+});
 
 app.use('/api-rifa', require('./routes/index'));
 
 app.get('/health', (req, res) => {
-    res.json({ status: 'healthy' });
+    res.json({
+        status: 'healthy',
+        timestamp: new Date().toISOString(),
+        service: 'rifa-backend'
+    });
+});
+
+app.get('/', (req, res) => {
+    const pkg = require(path.join(__dirname, 'package.json'));
+    res.json({
+        name: pkg.name,
+        version: pkg.version,
+        status: 'Rifa API Service',
+        documentation: '/api-docs',
+        health: '/health',
+        basePath: '/api-rifa'
+    });
+});
+
+app.use((err, req, res, next) => {
+    if (err.name === 'UnauthorizedError') {
+        res.status(401).json({
+            success: false,
+            code: 401,
+            error: 'Unauthorized',
+            message: 'Invalid token',
+            data: {}
+        });
+    } else {
+        next(err);
+    }
+});
+
+app.use((req, res, next) => {
+    res.status(404).json({ 
+        success: false,
+        code: 404, 
+        message: 'Route not found', 
+        path: req.originalUrl,
+        method: req.method 
+    });
 });
 
 module.exports = app;
