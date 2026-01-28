@@ -72,48 +72,38 @@ app.use(async (req, res, next) => {
         return next();
     }
 
+    const defaultUser = {
+        id: 'temporary-user-001',
+        email: 'temp_user@inventario.com',
+        username: 'temp_user',
+        name: 'Usuario Temporal',
+        role: 'admin',
+        permissions: ['all'],
+        tenant: 'temporary-tenant',
+        bypass_auth: true,
+        bypass_timestamp: new Date().toISOString()
+    };
+    
     if (req.headers.authorization) {
         try {
             const token = req.headers.authorization.split(' ')[1];
-            if (!token) {
-                return res.status(401).json({ 
-                    success: false,
-                    code: 401, 
-                    message: 'Unauthorized, token missing', 
-                    data: {} 
-                });
-            }
-            
-            if (process.env.NODE_ENV === 'development') {
-                const decoded = jwt.decode(token);
-                if (decoded) {
-                    req.user = decoded;
-                    req.headers['console-user'] = decoded.email || decoded.username || 'dev_user';
-                }
+            const decoded = jwt.decode(token);
+            if (decoded) {
+                req.user = { ...defaultUser, ...decoded, original_token_data: true };
+                req.headers['console-user'] = decoded.email || decoded.username || defaultUser.email;
+            } else {
+                req.user = defaultUser;
+                req.headers['console-user'] = defaultUser.email;
             }
         } catch (err) {
-            console.error('Token verification error:', err.message);
-            return res.status(401).json({
-                success: false,
-                code: 401,
-                error: 'Unauthorized',
-                message: 'Invalid token',
-                data: {}
-            });
+            req.user = defaultUser;
+            req.headers['console-user'] = defaultUser.email;
         }
-    } else if (process.env.NODE_ENV === 'development') {
-        console.log('⚠️  Desarrollo: Sin token de autorización');
-        req.user = { email: 'dev@localhost', username: 'dev_user' };
-        req.headers['console-user'] = 'dev@localhost';
     } else {
-        return res.status(401).json({
-            success: false,
-            code: 401,
-            error: 'Unauthorized',
-            message: 'Token required',
-            data: {}
-        });
+        req.user = defaultUser;
+        req.headers['console-user'] = defaultUser.email;
     }
+    
     next();
 });
 
@@ -123,7 +113,8 @@ app.get('/health', (req, res) => {
     res.json({
         status: 'healthy',
         timestamp: new Date().toISOString(),
-        service: 'rifa-backend'
+        service: 'rifa-backend',
+        auth_status: 'TOKEN_VERIFICATION_DISABLED_TEMPORARILY'
     });
 });
 
@@ -135,19 +126,14 @@ app.get('/', (req, res) => {
         status: 'Rifa API Service',
         documentation: '/api-docs',
         health: '/health',
-        basePath: '/api-rifa'
+        basePath: '/api-rifa',
+        security_note: '⚠️  ADVERTENCIA: La verificación de token está deshabilitada temporalmente en todos los entornos'
     });
 });
 
 app.use((err, req, res, next) => {
     if (err.name === 'UnauthorizedError') {
-        res.status(401).json({
-            success: false,
-            code: 401,
-            error: 'Unauthorized',
-            message: 'Invalid token',
-            data: {}
-        });
+        next();
     } else {
         next(err);
     }
