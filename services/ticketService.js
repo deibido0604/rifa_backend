@@ -4,6 +4,7 @@ const models = require("../models");
 const logsConstructor = require("../utils/logs");
 const constants = require("../components/constants/index");
 const { buildError } = require("../utils/response");
+const cloudinary = require("../utils/cloudinary");
 
 function ticketService() {
   /**
@@ -15,6 +16,28 @@ function ticketService() {
         return buildError(400, "Datos incompletos!");
       }
 
+      // Subir imagen a Cloudinary
+      let imageUrl = "";
+      let cloudinaryId = "";
+
+      try {
+        // Subir imagen base64 a Cloudinary
+        const uploadResult = await cloudinary.uploader.upload(param.image, {
+          folder: "tickets",
+          resource_type: "image",
+          transformation: [
+            { width: 800, height: 800, crop: "limit" }, // Redimensionar
+            { quality: "auto:good" }, // Optimizar calidad
+          ],
+        });
+
+        imageUrl = uploadResult.secure_url;
+        cloudinaryId = uploadResult.public_id;
+      } catch (uploadError) {
+        console.error("Error subiendo a Cloudinary:", uploadError);
+        return buildError(500, "Error al subir la imagen");
+      }
+
       const ticketNumber = `TCK-${Date.now()}-${Math.floor(
         Math.random() * 1000,
       )}`;
@@ -22,10 +45,10 @@ function ticketService() {
       const ticket = new models.Ticket({
         fullName: param.fullName,
         phone: param.phone,
-        image: param.image,
+        image: imageUrl, // Ahora guardamos URL, no Base64
+        cloudinaryId: cloudinaryId, // Para poder borrar después si es necesario
         ticketNumber,
-        createdByIP:
-          req.headers["x-forwarded-for"] || req.socket.remoteAddress,
+        createdByIP: req.headers["x-forwarded-for"] || req.socket.remoteAddress,
       });
 
       const data = await ticket.save();
@@ -48,7 +71,6 @@ function ticketService() {
       return buildError(500, e.message);
     }
   }
-
   /**
    * Obtener tickets (ADMIN)
    */
@@ -118,9 +140,7 @@ function ticketService() {
    */
   async function approveTicket(id, userId, req) {
     try {
-      const ticket = await models.Ticket.findById(
-        mongoose.Types.ObjectId(id),
-      );
+      const ticket = await models.Ticket.findById(mongoose.Types.ObjectId(id));
 
       if (!ticket) {
         return buildError(404, "Ticket no encontrado!");
@@ -157,9 +177,7 @@ function ticketService() {
    */
   async function rejectTicket(id, userId, req) {
     try {
-      const ticket = await models.Ticket.findById(
-        mongoose.Types.ObjectId(id),
-      );
+      const ticket = await models.Ticket.findById(mongoose.Types.ObjectId(id));
 
       if (!ticket) {
         return buildError(404, "Ticket no encontrado!");
