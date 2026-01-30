@@ -4,4 +4,5 @@ module.exports = {
   Permissions: require('./Permissions'),
   Roles: require('./Roles'),
   SystemUser: require('./SystemUser'),
+  Ticket: require('./Ticket'),
 };
